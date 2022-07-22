@@ -1,0 +1,123 @@
+@startuml
+
+class Range {
+    +void* begin;
+    +void* end;
+    +int size();
+}
+Range --*RingBuffer
+
+class RingBuffer {
+    +RingBuffer(int bufferSize);
+    +~RingBuffer();
+    +void* allocate(int size);
+    +T* Allocate(int count, bool aligned);
+    +void Construct(U* mem, Args...args);
+    +int max_size();
+    +int size();
+    +bool empty();
+    +void* getHead();
+    +void* getTail();
+    +Range getRange();
+    +void Circularize();
+
+    - int size;
+    - void* data;
+    - void* tail;
+    - void* head;
+}
+RingBuffer --o CommandQueue
+
+class TicketMutex {
+    +void lock();
+    +void unlock();
+    -atomic_int in;
+    -atomic_int out;
+}
+TicketMutex --o CommandQueue
+
+abstract class CommandBase {
+    + CommandBase(ExecuteFn fn);
+
+    + CommandBase* Execute();
+
+    - ExecuteFn fn;
+}
+
+class CustomCommand {
+    + CustomCommand(FuncT func, Args ... args);
+
+    +{static} void Execute(CommandBase* base, uintptr& next);
+
+    -FuncT func;
+    -tuple<Args...> args;
+}
+
+CustomCommand <|-- CommandBase
+
+class NoopCommand {
+    +NoopCommand(void* next);
+
+    +{static} void Execute(CommandBase* base, uintptr& next);
+
+    -uintptr next;
+}
+
+NoopCommand <|-- CommandBase
+
+class CommandQueue {
+    +CommandQueue(bool threadDispatch);
+    +void Submit(FuncT funcT, Args ... args);
+    +void AllocateCommand<Class>(Args ... args);
+    +RingBuffer::Range[] WaitForCommands();
+    +void Flush();
+    +bool Execute();
+    +void ReleaseRange(const RingBuffer& range);
+    +void Quit();
+
+    -TicketMutex mutex;
+    -Condition_variable cv;
+    -RingBuffer::Range[] commandsToExecute;
+
+    -RingBuffer buffer;
+
+    -{static}int REQUIRED_SIZE = 1_MB;
+    -{static}int BUFFER_SIZE = 3_MB;
+
+    -const bool THREAD_DISPATCH = true;
+
+    -size_t requiredSize;
+    -size_t freeSpace;
+
+    -atomic_bool quit = false;
+}
+CommandBase <..  CommandQueue
+
+class Pawnshop {
+    +Pawnshop(CommandQueue& queue);
+
+    +void TakeOrder<Order>((Args ... args);
+
+    -CommandQueue& queue;
+}
+
+class BuyOrder {
+    +BuyOrder(string item);
+    +{static} void Execute(CommandBase* base, uintptr& next);
+
+    -string item;
+}
+BuyOrder <|-- CommandBase
+
+class SellOrder {
+    +SellOrder(string item);
+    +{static} void Execute(CommandBase* base, uintptr& next);
+
+    -string item;
+}
+SellOrder <|-- CommandBase
+
+BuyOrder --o Pawnshop
+SellOrder --o Pawnshop
+
+@enduml
